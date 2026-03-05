@@ -584,7 +584,7 @@
       "task_id": "SEC-042",
       "task_kind": "qa",
       "title": "Gerar Resumo Executivo",
-      "description": "Produzir resumo executivo (max 1 página) com score final de segurança (0-100), top 5 riscos prioritários e recomendações de ação imediata.",
+      "description": "Produzir resumo executivo (max 1 página) com score final de segurança (0-100) calculado pela fórmula em report-template.security.json (severity_weights × domain_priority_weights com penalty_rules), top 5 riscos prioritários e recomendações de ação imediata.",
       "status": "todo",
       "depends_on": ["SEC-040", "SEC-041"],
       "targets": [
@@ -605,12 +605,14 @@
       "task_id": "SEC-043",
       "task_kind": "qa",
       "title": "Compilar Relatório Final de Auditoria",
-      "description": "Montar relatório completo: Resumo Executivo, Matriz de Vulnerabilidades, Análise Detalhada por Categoria, Riscos Prioritários, Recomendações Técnicas. Score final com justificativa. Todos os achados rastreáveis aos checks do PARCER.",
+      "description": "Montar relatório completo projetando dados dos result files no report-template.security.json (schema) e REPORT_TEMPLATE.md (formato de renderização). Seções: header, executive_summary (com score calculado pela fórmula determinística), vulnerability_matrix, detailed_analysis por domínio, priority_risks com cenários de exploração, technical_recommendations em 4 tiers, e appendix com resultados completos e metadados de auditoria. Todos os achados rastreáveis aos checks do PARCER via check_id e finding_id.",
       "status": "todo",
       "depends_on": ["SEC-042"],
       "targets": [
+        "report-template.security.json",
+        "REPORT_TEMPLATE.md",
         "reports/phase4/executive-summary.md",
-        "reports/phase3/risk-matrix.md",
+        "reports/phase3/risk-matrix.json",
         "reports/phase4/technical-remediations.md",
         "reports/phase4/best-practices.md",
         "reports/phase2/results/"
